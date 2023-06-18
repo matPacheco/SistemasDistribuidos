@@ -22,4 +22,6 @@ except socket.gaierror:
 # Conectar ao servidor
 s.connect((host_ip, port))
 
+print(s.recv(1024).decode())
+
 print("O socket se conectou ao Google com sucesso")
