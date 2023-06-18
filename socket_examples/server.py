@@ -16,7 +16,7 @@ port = 12345
 
 # Vincular a porta
 # Sem nenhum IP porque estamos conectando ao localhost
-s.bind(('127.0.0.1', port))
+s.bind(('', port))
 print(f"Socket vinculado a {str(port)}")
 
 # Colocar o socket em "listening mode"
@@ -27,6 +27,8 @@ print("Socket is listening")
 while True:
     # Estabelecer conexão com o cliente
     c, addr = s.accept()
+    print(f"C={c}")
+    print(f"addr[0]={addr[0]} e addr[1]={addr[1]}")
     print(f"Conectado de {addr}")
 
     # Enviar uma mensagem ao client
