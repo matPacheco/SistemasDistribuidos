@@ -1,5 +1,5 @@
 import socket
-import pickle
+import json
 
 
 class Server:
@@ -35,9 +35,9 @@ class Server:
             ip_peer = address[0]
             port_peer = address[1]
 
-            # Vamos receber uma requisição em formato de pickle com as informações
+            # Vamos receber uma requisição em formato de json com as informações
             # Decodificamos e em "tipo" teremos qual é o tipo da requisição e chamaremos o método correspondente
-            response = pickle.loads(c.recv(4096))
+            response = json.loads(c.recv(4096).decode())
             if response["tipo"] == "JOIN":
                 self.join(c, ip_peer, port_peer, response["files_list"])
             elif response["tipo"] == "SEARCH":
@@ -65,8 +65,8 @@ class Server:
             if file_name in peer["files"]:
                 peers_result.append('peer["ip_address"]:peer["port"]')
 
-        # Enviar a lista com os peers encodada com pickle
-        client.send(pickle.dumps(peers_result))
+        # Enviar a lista com os peers encodada com json
+        client.send(json.dumps(peers_result).encode())
 
     def update(self, client, ip_address, port, file_name):
         # Adiciona esse arquivo na lista desse peer
@@ -90,18 +90,37 @@ class Peer:
         except socket.error as error:
             print(f"A criação do socket falhou com o erro {error}")
 
-    def join(self, files_list):
+    def menu(self):
+        print("Escolha a opção desejada, escrevendo o número correspondente")
+        print("1- JOIN")
+        print("2- SEARCH")
+        print("3- DOWNLOAD")
+
+        option = int(input())
+        if option == 1:
+            ip = input("Qual o IP desse peer?")
+            port = input("Qual a porta desse peer?")
+            files_path = input("Em qual pasta estão os arquivos?")
+            self.join(ip, port, files_path)
+        elif option == 2:
+            self.search("TODO")
+        elif option == 3:
+            self.download()
+
+    def join(self, ip_peer, port_peer, path):
         # TODO criar pasta para cada peer
         self.socket.connect(('127.0.0.1', self.port))  # TODO tirar isso daqui e colocar em outro lugar
 
         # Vamos enviar os dados como um dicionário
         to_send_dict = {
             "tipo": "JOIN",
+            "ip_peer": ip_peer,
+            "port_peer": port_peer,
             "files_list": files_list
         }
 
-        # Usamos o pickle para transformar os dados em bytes e os enviamos
-        self.socket.send(pickle.dumps(to_send_dict))
+        # Usamos em formato json para carregarmos várias informações
+        self.socket.send(json.dumps(to_send_dict).encode())
 
         # Recebemos a resposta se tudo ok
         response = self.socket.recv(2048).decode()
@@ -117,14 +136,29 @@ class Peer:
             "file_name": file_name
         }
 
-        # Usamos o pickle para transformar os dados em bytes e os enviamos
-        self.socket.send(pickle.dumps(to_send_dict))
+        # Usamos em formato json para carregarmos várias informações
+        self.socket.send(json.dumps(to_send_dict).encode())
 
-        # Recebemos a resposta em pickle por se tratar de uma lista
-        response = pickle.dumps(self.socket.recv(2048))
+        # Recebemos a resposta em json por se tratar de uma lista
+        response = json.dumps(self.socket.recv(2048).decode())
 
         print(f"peers com arquivo solicitado: {str(response)}")
 
-    def update(self):
-        # TODO
-        return
+    def download(self):
+        return  # TODO
+
+    def update(self, file_name):
+        to_send_dict = {
+            "tipo": "UPDATE",
+            "file_name": file_name
+        }
+
+        # Usamos o JSON para transformar os dados em bytes e os enviamos
+        self.socket.send(json.dumps(to_send_dict).encode())
+
+        # Resposta para verificar se o update deu certo
+        response = self.socket.recv(2048).decode()
+        is_response_ok = False
+
+        if "UPDATE_OK" in response:
+            is_response_ok = True
