@@ -157,3 +157,4 @@ cython_debug/
 # Test files
 socket_examples/client_tests.py
 socket_examples/server_tests.py
+socket_examples/test.py
