@@ -1,33 +1,27 @@
 import socket
 import json
+import os
+import threading
 
 
 class Server:
     def __init__(self, port=1099):
-        # TODO retirar prints
-        # Inicializar variável do socket e da peer_list
+        # Inicializar atributo do socket e da files_list
         self.socket = None
-        self.peer_list = {}
+        self.files_list = {}
 
         # Criar o socket
-        try:
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            print("Socket criado com sucesso.")
-        except socket.error as error:
-            print(f"A criação do socket falhou com o erro {error}")
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         # Vincular a porta
         # Sem nenhum IP porque estamos conectando ao localhost
         self.socket.bind(('', port))
-        print(f"Socket vinculado a porta={str(port)}")
 
         # Colocar o socket em "listening mode"
         self.socket.listen(5)
-        print("Socket is listening")
 
         # Um loop infinito até que o interrompemos ou um erro ocorra
         while True:
-            # TODO verificar quando finalizar
             # Estabelecer conexão com o cliente
             c, address = self.socket.accept()
 
@@ -48,11 +42,18 @@ class Server:
             # Encerrar a conexão com o client
             c.close()
 
-    def join(self, client, ip_address, port, data):
-        # Adicionamos a lista de arquivos ao dicionário com a lista dos peers
-        # Usamos [IP_ADDRESS]:[PORT] como chave
-        self.peer_list[f"{ip_address}:{port}"] = data
-        print(f"Peer {ip_address}:{port} adicionado com arquivos {str(data)}.")
+    def join(self, client, ip_address, port, files):
+        # Vamos adicionar as informações desse peer para cada um de seus arquivos
+        peer_info = {
+            "ip_address": ip_address,
+            "port": port
+        }
+        for file in files:
+            try:  # Se esse arquivo já foi catalogado, simplesmente adicionamos esse peer na lista
+                self.files_list[file].append(peer_info)
+            except KeyError:  # Se esse arquivo não foi catalogado, criamos uma lista com as informações desse peer
+                self.files_list[file] = [peer_info]
+        print(f"Peer {ip_address}:{port} adicionado com arquivos {str(files)}.")
 
         # Enviamos de volta uma mensagem avisando que o join foi concluído com sucesso
         client.send("JOIN_OK".encode())
@@ -60,17 +61,18 @@ class Server:
     def search(self, client, ip_address, port, file_name):
         print(f"Peer {ip_address}:{port} solicitou arquivo {file_name}")
 
-        peers_result = []
-        for peer in self.peer_list:  # TODO refazer esse for, agora é um dicionário
-            if file_name in peer["files"]:
-                peers_result.append('peer["ip_address"]:peer["port"]')
+        peers_result = self.files_list[file_name]
 
         # Enviar a lista com os peers encodada com json
         client.send(json.dumps(peers_result).encode())
 
     def update(self, client, ip_address, port, file_name):
-        # Adiciona esse arquivo na lista desse peer
-        self.peer_list[f"{ip_address}:{port}"].append(file_name)
+        peer_info = {
+            "ip_address": ip_address,
+            "port": port
+        }
+        # Adiciona esse peer na lista desse arquivo
+        self.files_list[file_name].append(peer_info)
 
         # Enviamos de volta uma mensagem avisando que o update foi concluído com sucesso
         client.send("UPDATE_OK".encode())
@@ -78,17 +80,14 @@ class Server:
 
 
 class Peer:
-    def __init__(self, port=1099):
-        # Inicializar variável do socket e da peer_list
+    def __init__(self):
+        # Inicializar atributos da classe
         self.socket = None
-        self.port = port
-
-        # Criar o socket
-        try:
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            print("Socket criado com sucesso.")
-        except socket.error as error:
-            print(f"A criação do socket falhou com o erro {error}")
+        self.ip = None
+        self.port = None
+        self.files_path = None
+        self.file_last_search = None
+        self.peers_last_search = []
 
     def menu(self):
         print("Escolha a opção desejada, escrevendo o número correspondente")
@@ -97,19 +96,37 @@ class Peer:
         print("3- DOWNLOAD")
 
         option = int(input())
-        if option == 1:
+        if option == 1:  # JOIN
+            ip = input("Qual o IP desse peer?")
+            self.ip = ip    # Salva o IP como atributo
+
+            port = input("Qual a porta desse peer?")
+            self.port = port    # Salva a Porta como atributo
+
+            files_path = input("Em qual pasta estão os arquivos?")
+            self.files_path = files_path    # Salva o caminho da pasta como atributo
+
+            self.join(ip, port, files_path)
+        elif option == 2:  # SEARCH
+            file_name = input("Qual o nome do arquivo que deseja baixar?")
+            self.file_last_search = file_name   # Salva o nome do arquivo como atributo
+            self.search(file_name)
+        elif option == 3:  # DOWNLOAD
             ip = input("Qual o IP desse peer?")
             port = input("Qual a porta desse peer?")
-            files_path = input("Em qual pasta estão os arquivos?")
-            self.join(ip, port, files_path)
-        elif option == 2:
-            self.search("TODO")
-        elif option == 3:
-            self.download()
+
+            self.download(ip, port, self.file_last_search)
+
+    def _connect_to_server(self):
+        s = socket.socket()
+        s.connect(('127.0.0.1', 1099))
+
+        return s
 
     def join(self, ip_peer, port_peer, path):
-        # TODO criar pasta para cada peer
-        self.socket.connect(('127.0.0.1', self.port))  # TODO tirar isso daqui e colocar em outro lugar
+        s = self._connect_to_server()
+        # Lista com todos os arquivos do caminho especificado
+        files_list = os.listdir(path)
 
         # Vamos enviar os dados como um dicionário
         to_send_dict = {
@@ -120,44 +137,112 @@ class Peer:
         }
 
         # Usamos em formato json para carregarmos várias informações
-        self.socket.send(json.dumps(to_send_dict).encode())
+        s.send(json.dumps(to_send_dict).encode())
 
         # Recebemos a resposta se tudo ok
-        response = self.socket.recv(2048).decode()
+        response = s.recv(4096).decode()
 
         # Se a requisição foi concluída com sucesso, vai receber um JOIN_OK
         if "JOIN_OK" in response:
-            print(f"Sou peer [IP]:[porta] com arquivos {str(files_list)}")  # TODO ip:porta
+            print(f"Sou peer {ip_peer}:{port_peer} com arquivos {str(files_list)}")
 
     def search(self, file_name):
-        # TODO conectar o socket ao servidor
+        s = self._connect_to_server()
         to_send_dict = {
             "tipo": "SEARCH",
             "file_name": file_name
         }
 
         # Usamos em formato json para carregarmos várias informações
-        self.socket.send(json.dumps(to_send_dict).encode())
+        s.send(json.dumps(to_send_dict).encode())
 
         # Recebemos a resposta em json por se tratar de uma lista
-        response = json.dumps(self.socket.recv(2048).decode())
+        response = json.loads(s.recv(4096).decode())
+        # Salvar essa última pesquisa no atributo do objeto
+        self.peers_last_search = response
 
-        print(f"peers com arquivo solicitado: {str(response)}")
+        # Vamos formatar a lista para podermos imprimir em formato de IP:Port
+        peer_list_formatted = []
+        for peer in response:
+            ip = peer["ip_address"]
+            port = peer["port"]
+            peer_formatted = f'{ip}:{port}'
+            peer_list_formatted.append(peer_formatted)
 
-    def download(self):
-        return  # TODO
+        print(f"Peers com arquivo solicitado: {str(peer_list_formatted)}")
+
+    def wait_download(self):
+        # Cria um socket novo para comunicaçao entre peers
+        socket_recv_download = socket.socket()
+
+        # Vincula esse socket com o IP/Porta que foi capturado anteriormente
+        socket_recv_download.bind((self.ip, self.port))
+        socket_recv_download.listen(5)
+
+        # Aguarda outros peers conectarem
+        while True:
+            client, addr = socket_recv_download.accept()
+
+            # Recebe o nome do arquivo a ser baixado
+            file_name = client.recv(4096).decode()
+
+            # Caminho do arquivo
+            file_path = os.path.join(self.files_path, file_name)
+
+            # Abre o arquivo e o seu conteúdo como binário
+            file = open(file_path, "rb")
+            data = file.read()
+
+            # Envia o conteúdo do arquivo
+            client.sendall(data)
+
+            # Ao fim, envia uma flag para o outro peer saber quando parar
+            client.send("b<FIM>")
+
+            # Fecha a conexão e o arquivo
+            client.close()
+            file.close()
+
+    def download(self, ip, port, file_name):
+        # Cria um socket para conexão entre peers
+        socket_download = socket.socket()
+
+        # Conecta com o peer do IP/Porta correspondente
+        socket_download.connect((ip, port))
+
+        # Envia o nome do arquivo a ser baixado
+        socket_download.send(file_name.encode())
+
+        # Caminho onde o arquivo ficará depois de baixado
+        file_path = os.path.join(self.files_path, file_name)
+        file = open(file_path, "wb")
+
+        done = False  # Variável para saber quando parar de receber dados
+        while not done:
+            # Recebe repetidamente o conteúdo e escreve no arquivo criado
+            received = socket_download.recv(4096)
+            # Quando receber a flag <FIM> significa que o conteúdo chegou ao fim
+            if received[-5:] == b"<FIM>":
+                file.write(received[:-5])
+                done = True
+            else:
+                file.write(received)
+        # Fecha a conexão e o arquivo
+        socket_download.close()
+        file.close()
 
     def update(self, file_name):
+        s = self._connect_to_server()
         to_send_dict = {
             "tipo": "UPDATE",
             "file_name": file_name
         }
 
         # Usamos o JSON para transformar os dados em bytes e os enviamos
-        self.socket.send(json.dumps(to_send_dict).encode())
+        s.send(json.dumps(to_send_dict).encode())
 
         # Resposta para verificar se o update deu certo
-        response = self.socket.recv(2048).decode()
+        response = s.recv(2048).decode()
         is_response_ok = False
 
         if "UPDATE_OK" in response:
