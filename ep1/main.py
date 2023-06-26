@@ -158,6 +158,9 @@ class Peer:
         if "JOIN_OK" in response:
             print(f"Sou peer {ip_peer}:{port_peer} com arquivos {str(files_list)}")
 
+        # Encerra conexão
+        s.close()
+
     def search(self, file_name):
         # Requisição SEARCH ao servidor
 
@@ -184,6 +187,9 @@ class Peer:
             peer_list_formatted.append(peer_formatted)
 
         print(f"Peers com arquivo solicitado: {str(peer_list_formatted)}")
+
+        # Encerra conexão
+        s.close()
 
     def wait_download(self):
         # Espera uma requisição DOWNLOAD de outro peer
@@ -267,3 +273,6 @@ class Peer:
 
         if "UPDATE_OK" in response:
             is_response_ok = True
+
+        # Encerra conexão
+        s.close()
