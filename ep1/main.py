@@ -43,6 +43,8 @@ class Server:
             c.close()
 
     def join(self, client, ip_address, port, files):
+        # Recebe uma requisição JOIN
+
         # Vamos adicionar as informações desse peer para cada um de seus arquivos
         peer_info = {
             "ip_address": ip_address,
@@ -59,6 +61,8 @@ class Server:
         client.send("JOIN_OK".encode())
 
     def search(self, client, ip_address, port, file_name):
+        # Recebe uma requisição SEARCH
+
         print(f"Peer {ip_address}:{port} solicitou arquivo {file_name}")
 
         peers_result = self.files_list[file_name]
@@ -67,6 +71,8 @@ class Server:
         client.send(json.dumps(peers_result).encode())
 
     def update(self, client, ip_address, port, file_name):
+        # Recebe uma requisição UPDATE
+
         peer_info = {
             "ip_address": ip_address,
             "port": port
@@ -107,6 +113,10 @@ class Peer:
             self.files_path = files_path    # Salva o caminho da pasta como atributo
 
             self.join(ip, port, files_path)
+
+            # Começar a thread que vai esperar conexão de outros peers
+            thread = threading.Thread(target=self.wait_download())
+            thread.start()
         elif option == 2:  # SEARCH
             file_name = input("Qual o nome do arquivo que deseja baixar?")
             self.file_last_search = file_name   # Salva o nome do arquivo como atributo
@@ -124,6 +134,8 @@ class Peer:
         return s
 
     def join(self, ip_peer, port_peer, path):
+        # Requisição JOIN ao servidor
+
         s = self._connect_to_server()
         # Lista com todos os arquivos do caminho especificado
         files_list = os.listdir(path)
@@ -147,6 +159,8 @@ class Peer:
             print(f"Sou peer {ip_peer}:{port_peer} com arquivos {str(files_list)}")
 
     def search(self, file_name):
+        # Requisição SEARCH ao servidor
+
         s = self._connect_to_server()
         to_send_dict = {
             "tipo": "SEARCH",
@@ -172,6 +186,8 @@ class Peer:
         print(f"Peers com arquivo solicitado: {str(peer_list_formatted)}")
 
     def wait_download(self):
+        # Espera uma requisição DOWNLOAD de outro peer
+
         # Cria um socket novo para comunicaçao entre peers
         socket_recv_download = socket.socket()
 
@@ -204,6 +220,8 @@ class Peer:
             file.close()
 
     def download(self, ip, port, file_name):
+        # Requisição DOWNLOAD a outro peer
+
         # Cria um socket para conexão entre peers
         socket_download = socket.socket()
 
@@ -232,6 +250,8 @@ class Peer:
         file.close()
 
     def update(self, file_name):
+        # Requisição UPDATE ao servidor
+
         s = self._connect_to_server()
         to_send_dict = {
             "tipo": "UPDATE",
